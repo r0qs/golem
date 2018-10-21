@@ -57,6 +57,7 @@ class IncomesKeeper:
                     event='confirmed',
                     subtask_id=e.subtask,
                     delay=delay,
+                    received=received,
                 )
 
     def received_forced_payment(
@@ -103,11 +104,6 @@ class IncomesKeeper:
         if not inserted and not income.accepted_ts:
             income.accepted_ts = accepted_ts
             income.save()
-            dispatcher.send(
-                signal='golem.income',
-                event='created',
-                subtask_id=subtask_id
-            )
         return income
 
     @staticmethod

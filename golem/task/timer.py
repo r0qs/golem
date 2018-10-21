@@ -86,4 +86,4 @@ class ActionTimers:
 
 ProviderIdleTimer = ActionTimer()  # noqa
 ProviderComputeTimers = ActionTimers()  # noqa
-
+ProviderTTCDelayTimers = ActionTimers()  # noqa
