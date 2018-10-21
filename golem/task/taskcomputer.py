@@ -94,7 +94,7 @@ class TaskComputer(object):
             logger.error("Trying to assign a task, when it's already assigned")
             return False
 
-        ProviderIdleTimer.comp_started()
+        ProviderIdleTimer.start()
         dispatcher.send(
             signal='golem.taskcomputer',
             event='subtask_started',
@@ -386,7 +386,7 @@ class TaskComputer(object):
 
     def __task_finished(self, ctd: dict) -> None:
 
-        ProviderIdleTimer.comp_finished()
+        ProviderIdleTimer.finish()
         dispatcher.send(
             signal='golem.taskcomputer',
             event='subtask_finished',

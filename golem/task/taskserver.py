@@ -548,8 +548,7 @@ class TaskServer(
             task_id = keeper.get_task_id_for_subtask(subtask_id)
             header = keeper.get_task_header(task_id).fixed_header
             environment = self.get_environment_by_id(header.environment)
-            computation_time = ProviderIdleTimer.last_comp_finished - \
-                ProviderIdleTimer.last_comp_started
+            computation_time = ProviderIdleTimer.time
 
             update_requestor_efficiency(
                 node_id=keeper.get_node_for_task_id(task_id),
