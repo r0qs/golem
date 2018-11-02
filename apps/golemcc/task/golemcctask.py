@@ -82,7 +82,6 @@ class BasicTaskBuilder(TaskBuilder):
 
 
 class GolemccTaskBuilder(BasicTaskBuilder):
-
     def build(self) -> 'Task':
         return GolemccTask(self.owner,
                              self.task_definition,
@@ -90,10 +89,10 @@ class GolemccTaskBuilder(BasicTaskBuilder):
 
 
 class GolemccBenchmarkTaskBuilder(GolemccTaskBuilder):
-
-    BENCHMARK_FILE = 'fw_adder.yaml'
-
     def build(self) -> 'Task':
+        self.task_definition.files = '/home/mplebanski/main.c;'
+        self.task_definitions.stdargs = '-o main main.c'
+        self.task_definitions.env = ''
         return GolemccTask(self.owner,
                              self.task_definition,
                              self.dir_manager)
