@@ -164,7 +164,7 @@ class GolemccTask(DockerTask):
     def __init__(self,
                  owner: Node,
                  task_definition: TaskDefinition,
-                 dir_manager: DirManager)
+                 dir_manager: DirManager):
         super().__init__(owner, task_definition, dir_manager)
         self.dispatched_subtasks = {}
         self.progress = 0.0
