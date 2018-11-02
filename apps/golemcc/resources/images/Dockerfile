@@ -18,10 +18,6 @@ RUN apt-get clean \
     && apt-get -y autoremove \
     && rm -rf /var/lib/apt/lists/*
 
-RUN curl https://bootstrap.pypa.io/get-pip.py -o get-pip.py && python get-pip.py
-
-RUN pip install FireWorks matplotlib paramiko fabric requests
-
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN sed -i -e 's/\r$//' /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

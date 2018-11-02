@@ -6,8 +6,6 @@ import yaml
 import queue
 
 from ethereum.utils import denoms
-from fireworks import LaunchPad, ScriptTask, Workflow
-from fireworks.utilities.filepad import FilePad
 from typing import List, Optional
 
 import golem_messages
@@ -15,7 +13,7 @@ from golem_messages import idgenerator
 from golem_verificator.verifier import SubtaskVerificationState
 
 from apps.core.task.coretaskstate import TaskDefinition, Options
-from apps.fireworks.fireworksenvironment import FireworksTaskEnvironment
+from apps.golemcc.golemccenvironment import GolemccTaskEnvironment
 from golem.network.p2p.node import Node
 from golem.resource.dirmanager import DirManager
 from golem.core.common import timeout_to_deadline, string_to_timeout,\
@@ -36,20 +34,20 @@ def apply(obj, *initial_data, **kwargs):
         setattr(obj, key, kwargs[key])
 
 
-class FireWorksTaskDefinition(TaskDefinition):
+class GolemccTaskDefinition(TaskDefinition):
     def __init__(self):
         super().__init__()
-        self.task_type = 'Fireworks'
+        self.task_type = 'Golemcc'
 
 
-class FireworksTaskTypeInfo(TaskTypeInfo):
+class GolemccTaskTypeInfo(TaskTypeInfo):
     def __init__(self):
         super().__init__(
-            "Fireworks",
-            FireWorksTaskDefinition,
+            "Golemcc",
+            GolemccTaskDefinition,
             TaskDefaults(),
             Options,
-            FireworksTaskBuilder
+            GolemccTaskBuilder
         )
 
 
@@ -83,48 +81,22 @@ class BasicTaskBuilder(TaskBuilder):
         return td
 
 
-class FireworksTaskBuilder(BasicTaskBuilder):
-
-    DEFAULT_LAUNCHPAD = {
-        'host': 'localhost',
-        'port': 27017,
-        'name': 'fireworks',
-        'username': None,
-        'password': None,
-        'logdir': None,
-        'strm_lvl': 'INFO'
-    }
+class GolemccTaskBuilder(BasicTaskBuilder):
 
     def build(self) -> 'Task':
-        if hasattr(self.task_definition, 'launchpad_path'):
-            with open(self.task_definition.launchpad_path) as lf:
-                launchpad_dict = yaml.load(lf)
-        else:
-            launchpad_dict = self.DEFAULT_LAUNCHPAD
-        return FireworksTask(self.owner,
+        return GolemccTask(self.owner,
                              self.task_definition,
-                             self.dir_manager,
-                             LaunchPad.from_dict(launchpad_dict),
-                             Workflow.from_file(self.task_definition.workflow_path))
+                             self.dir_manager)
 
 
-class FireworksBenchmarkTaskBuilder(FireworksTaskBuilder):
+class GolemccBenchmarkTaskBuilder(GolemccTaskBuilder):
 
     BENCHMARK_FILE = 'fw_adder.yaml'
 
     def build(self) -> 'Task':
-        launchpad_dict = self.DEFAULT_LAUNCHPAD
-        firework_bench_path = os.path.join(get_golem_path(),
-                                           'apps',
-                                           'fireworks',
-                                           'benchmark',
-                                           'data',
-                                           self.BENCHMARK_FILE)
-        return FireworksTask(self.owner,
+        return GolemccTask(self.owner,
                              self.task_definition,
-                             self.dir_manager,
-                             LaunchPad.from_dict(launchpad_dict),
-                             Workflow.from_file(firework_bench_path))
+                             self.dir_manager)
 
 
 class DockerTask(Task):
@@ -187,76 +159,16 @@ class ExtraDataBuilder(object):
         return Task.ExtraData(ctd=ctd)
 
 
-class FireworksTask(DockerTask):
-    ENVIRONMENT_CLASS = FireworksTaskEnvironment
+class GolemccTask(DockerTask):
+    ENVIRONMENT_CLASS = GolemccTaskEnvironment
 
     def __init__(self,
                  owner: Node,
                  task_definition: TaskDefinition,
-                 dir_manager: DirManager,
-                 launchpad: LaunchPad,
-                 workflow: Workflow) -> None:
+                 dir_manager: DirManager)
         super().__init__(owner, task_definition, dir_manager)
-        self.launchpad = launchpad
-        self.workflow = workflow
-
-        # FIXME restart launchpad and filepad
-        # caused by filepad labels duplication
-        # this must be called after launchpad assignment
-        self.launchpad.reset('', require_password=False)
-        filepad = self._get_filepad()
-        filepad.reset()
-
-        self.launchpad.add_wf(self.workflow)
-
-        self._put_resources_to_db(task_definition.resources)
-        # links and parent_links are Firework specific structures
-        # they are used here to efficiently walk through workflow
-        # dependencies and allow submitting subtasks in correct order
-        self.links = copy.deepcopy(workflow.links)
-        self.parent_links = copy.deepcopy(workflow.links.parent_links)
-
-        # work_queue is filled on initialization and on each computation_finished
-        # it allows query_extra_data to generate tasks according to
-        # Fireworks workflow
-        self.work_queue = list()
-
-        # work_queue initialization
-        for firework in self.get_ready_fireworks():
-            self.work_queue.append(firework.fw_id)
-
-        # State tracking structure helps to determine when
-        # the task has been finished
         self.dispatched_subtasks = {}
         self.progress = 0.0
-
-    def get_ready_fireworks(self):
-        fws = []
-        for fw in self.workflow.fws:
-            if fw.state == 'READY':
-                fws.append(fw)
-        return fws
-
-    def _get_filepad(self):
-        filepad_dict = {
-            'host': self.launchpad.host,
-            'port': self.launchpad.port,
-            'database': self.launchpad.name,
-            'username': self.launchpad.username,
-            'password': self.launchpad.password,
-            'logdir': self.launchpad.logdir,
-            'strm_lvl': self.launchpad.strm_lvl
-        }
-        return FilePad(**filepad_dict)
-
-    def _put_resources_to_db(self, resources, overwrite=True):
-        filepad = self._get_filepad()
-        for label, path in resources.items():
-            if overwrite:
-                file, _ = filepad.get_file(label)
-                if file:
-                    filepad.delete_file(label)
-            filepad.add_file(path, label)
 
     def initialize(self, dir_manager):
         """Called after adding a new task, may initialize or create some resources
@@ -278,14 +190,10 @@ class FireworksTask(DockerTask):
         :param node_id: id of a node that wants to get a next subtask
         :param node_name: name of a node that wants to get a next subtask
         """
-        fw_id = self.work_queue.pop(0)
         subtask_id = self.create_subtask_id()
-        subtask_data = {
-            'launchpad': self.launchpad.to_dict(),
-            'fw_id': fw_id
-        }
+        subtask_data = {}
 
-        self.dispatched_subtasks[subtask_id] = {'fw_id': fw_id}
+        self.dispatched_subtasks[subtask_id] = {'extra_data': subtask_data}
 
         subtask_builder = ExtraDataBuilder(self.header, subtask_id, subtask_data,
                                            self.src_code,
@@ -301,19 +209,21 @@ class FireworksTask(DockerTask):
         :param extra_data
         :return str:
         """
-        return 'fireworks task'
+        return 'golemcc task'
 
     def needs_computation(self) -> bool:
         """ Return information if there are still some subtasks that may be dispended
         :return bool: True if there are still subtask that should be computed, False otherwise
         """
-        return self.work_queue
+        # return self.work_queue
+        pass
 
     def finished_computation(self) -> bool:
         """ Return information if tasks has been fully computed
         :return bool: True if there is all tasks has been computed and verified
         """
-        return not self.work_queue and not self.dispatched_subtasks
+        # return not self.work_queue and not self.dispatched_subtasks
+        pass
 
     def computation_finished(self, subtask_id, task_result,
                              result_type=ResultType.DATA,
@@ -323,18 +233,9 @@ class FireworksTask(DockerTask):
         :param task_result: task result, can be binary data or list of files
         :param result_type: ResultType representation
         """
-        parent_fw = self.dispatched_subtasks[subtask_id]['fw_id']
-        for child_fw in self.links[parent_fw]:
-            # Remove completed parent link from each affected children
-            self.parent_links[child_fw].remove(parent_fw)
-            # If there are no parent links it means that the firework is ready
-            if not self.parent_links[child_fw]:
-                self.work_queue.append(child_fw)
         del self.dispatched_subtasks[subtask_id]
-
         if self.finished_computation():
             self.progress = 1.0
-
         try:
             if verification_finished:
                 verification_finished()
@@ -365,7 +266,7 @@ class FireworksTask(DockerTask):
         :return int: number should be greater than 0
         """
         # It won't
-        return len(self.workflow.links.nodes)
+        return 1
 
     def get_active_tasks(self) -> int:
         """ Return number of tasks that are currently being computed
@@ -378,7 +279,7 @@ class FireworksTask(DockerTask):
         :return int: number should be between 0 and a result of get_total_tasks
         """
         # TODO analogical to get_total_tasks
-        return self.get_total_tasks() - self.get_active_tasks()
+        return 0 if self.dispatched_subtasks else 1
 
     def restart(self):
         """ Restart all subtask computation for this task """
@@ -399,7 +300,7 @@ class FireworksTask(DockerTask):
         """ Return task computations progress
         :return float: Return number between 0.0 and 1.0.
         """
-        return 1.0 - (self.get_tasks_left() / self.get_total_tasks())
+        return self.progress
 
     def get_resources(self) -> list:
         """ Return list of files that are need to compute this task."""
