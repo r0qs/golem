@@ -44,7 +44,6 @@ class IncomesKeeper:
         amount_left = amount
 
         for e in expected:
-            delay = time.time() - datetime_to_timestamp(e.created_date)
             received = min(amount_left, e.value_expected)
             e.value_received += received
             amount_left -= received
@@ -55,9 +54,9 @@ class IncomesKeeper:
                 dispatcher.send(
                     signal='golem.income',
                     event='confirmed',
-                    subtask_id=e.subtask,
-                    delay=delay,
-                    received=received,
+                    node_id=e.sender_node,
+                    amount=e.value_received,
+                    delay=time.time() - datetime_to_timestamp(e.created_date),
                 )
 
     def received_forced_payment(
@@ -183,7 +182,7 @@ class IncomesKeeper:
             dispatcher.send(
                 signal='golem.income',
                 event='overdue_single',
-                subtask_id=income.subtask,
+                node_id=income.sender_node,
             )
 
         dispatcher.send(
