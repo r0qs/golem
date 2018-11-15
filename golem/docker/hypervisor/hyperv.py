@@ -49,7 +49,7 @@ class HyperVHypervisor(DockerMachineHypervisor):
         try:
             output = cls._run_ps(command=command)
             return output == "Hyper-V"
-        except RuntimeError as e:
+        except (RuntimeError, OSError) as e:
             logger.warning(f"Error checking Hyper-V availability: {e}")
             return False
 
